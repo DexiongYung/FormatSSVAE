@@ -15,7 +15,6 @@ class NameDataset(Dataset):
         df = pd.read_csv(csv_path)
         df = self._clean_dataframe(df, col_name)
         self.data_frame = df[col_name]
-        self.format_col = df[format_col_name] if format_col_name is not None else None
 
     def __len__(self):
         return len(self.data_frame)
