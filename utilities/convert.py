@@ -1,5 +1,6 @@
 import torch
-from FormatSSVAE.const import ALL_LETTERS, PAD_CHAR
+from constant import ALL_LETTERS, PAD_CHAR
+
 
 def pad_string(original: str, desired_len: int, pad_character: str = PAD_CHAR):
     """
@@ -7,6 +8,7 @@ def pad_string(original: str, desired_len: int, pad_character: str = PAD_CHAR):
     original: The string to be padded
     """
     return (pad_character * (desired_len - len(original))) + original
+
 
 def chars_to_tensor(chars: list, letter_set: str):
     """
@@ -16,9 +18,11 @@ def chars_to_tensor(chars: list, letter_set: str):
     tensor = torch.zeros(1, len(chars), len(letter_set))
     for i_letter, letter in enumerate(chars):
         letter_index = letter_set.find(letter)
-        if letter_index == -1: raise Exception(f'Invalid Character {letter} Detected')
+        if letter_index == -1:
+            raise Exception(f'Invalid Character {letter} Detected')
         tensor[0][i_letter][letter_index] = 1
     return tensor
+
 
 def strings_to_tensor(strings: list, letter_set: str, tensor_len: int):
     """
@@ -34,7 +38,7 @@ def strings_to_tensor(strings: list, letter_set: str, tensor_len: int):
     for i_string, string in enumerate(padded_strs):
         for i_char, letter in enumerate(string):
             letter_index = letter_set.find(letter)
-            if letter_index == -1: raise Exception(f'Invalid Character {letter} Detected')
+            if letter_index == -1:
+                raise Exception(f'Invalid Character {letter} Detected')
             tensor[i_char][i_string][letter_index] = 1
     return tensor
-

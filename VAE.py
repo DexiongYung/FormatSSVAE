@@ -1,11 +1,11 @@
 import os
 import pyro
-import pyro.distributions as dist
 import torch
-from FormatSSVAE.const import ALL_LETTERS, EOS_CHAR, MAX_STRING_LEN
-from FormatSSVAE.neural_net.mlp import NeuralNet
-from FormatSSVAE.neural_net.rnn import Encoder, Decoder
-from FormatSSVAE.util.convert import chars_to_tensor, strings_to_tensor
+import pyro.distributions as dist
+from constant import ALL_LETTERS, EOS_CHAR, MAX_STRING_LEN
+from models.MLP import NeuralNet
+from models.RNN import Encoder, Decoder
+from utilities.convert import chars_to_tensor, strings_to_tensor
 
 
 class FormatVAE():
@@ -25,7 +25,7 @@ class FormatVAE():
         self.loc_mlp = NeuralNet(
             input_size=mlp_input_size, hidden_size=mlp_hidden_size, output_size=self.latent_dim)
         self.scale_mlp = NeuralNet(
-            input_size=mlp_input_size, hidden_size=mlp_hidden_size, output_size=self.latent_dim)
+            input_size=mlp_input_size, hidden_size=mlp_hidden_size, output_size=self.latent_dim, softplus=True)
 
     def model(self, x):
         """
@@ -91,13 +91,62 @@ class FormatVAE():
             encoder_cell = encoder_hidden_state[1].view(batch_size, -1)
             flattened_lstm_output = torch.cat(
                 (encoder_hidden, encoder_cell), dim=1)
-                
+
             mean = self.loc_mlp.forward(flattened_lstm_output)
             sd = self.scale_mlp.forward(flattened_lstm_output)
 
             z = pyro.sample("z", dist.Normal(mean, sd).to_event(1))
 
-    def load_checkpoint(self, folder="nn_model", filename="checkpoint.pth.tar"):
+    def generate(self, x):
+        self.encoder_lstm.eval()
+        self.decoder_lstm.eval()
+        self.loc_mlp.eval()
+        self.scale_mlp.eval()
+
+        batch_size, x_tensor = self._preprocess_input(x)
+        outputs = [""] * batch_size
+
+        encoder_hidden_state = self.encoder_lstm.init_hidden(
+            batch_size=batch_size)
+
+        for i in range(MAX_STRING_LEN):
+            _, encoder_hidden_state = self.encoder_lstm.forward(
+                x_tensor[i].unsqueeze(0), encoder_hidden_state)
+
+        encoder_hidden = encoder_hidden_state[0].view(batch_size, -1)
+        encoder_cell = encoder_hidden_state[1].view(batch_size, -1)
+        flattened_lstm_output = torch.cat(
+            (encoder_hidden, encoder_cell), dim=1)
+
+        mean = self.loc_mlp.forward(flattened_lstm_output)
+        sd = torch.zeros(mean.shape)
+
+        z = dist.Normal(mean, sd).sample()
+
+        # z: <batch size, latent dim> => 2 x <LSTM decoder num layers x batch size x LSTM decoder hidden size>
+        decoder_hidden_state = (z[:, :self.decoder_hidden_size].unsqueeze(
+            0), z[:, self.decoder_hidden_size:].unsqueeze(0))
+        decoder_input = chars_to_tensor(
+            chars=[EOS_CHAR]*batch_size, letter_set=ALL_LETTERS)
+
+        # Step decoder MAX_STRING_LEN times using EOS as input and observe every output
+        for i in range(MAX_STRING_LEN):
+            categorical_probs, decoder_hidden_state = self.decoder_lstm.forward(
+                decoder_input, decoder_hidden_state)
+            decoder_input = dist.OneHotCategorical(
+                probs=categorical_probs.squeeze(0)).sample().unsqueeze(0)
+
+            for j in range(len(outputs)):
+                outputs[j] += ALL_LETTERS[decoder_input.squeeze(0)[
+                    j].nonzero()]
+
+        # Replace every character after the first occurrence EOS in all names
+        outputs = list(map(lambda string: string[:string.find(
+            EOS_CHAR)] if string.find(EOS_CHAR) != -1 else string, outputs))
+
+        return outputs
+
+    def load_checkpoint(self, folder="weights", filename="checkpoint.pth.tar"):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
             raise Exception(f"No model in path {folder}")
@@ -107,7 +156,7 @@ class FormatVAE():
         self.loc_mlp.load_state_dict(save_content['loc_mlp'])
         self.scale_mlp.load_state_dict(save_content['scale_mlp'])
 
-    def save_checkpoint(self, folder="nn_model", filename="checkpoint.pth.tar"):
+    def save_checkpoint(self, folder="weights", filename="checkpoint.pth.tar"):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)

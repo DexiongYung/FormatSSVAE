@@ -1,7 +1,7 @@
-from collections import OrderedDict
 import json
 import math
 import pandas as pd
+from collections import OrderedDict
 
 def load_json(jsonpath: str) -> dict:
     with open(jsonpath) as jsonfile:

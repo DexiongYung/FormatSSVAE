@@ -1,22 +1,32 @@
-import pandas as pd
+import sys
 import pyro
+import argparse
+import pandas as pd
 from pyro import poutine
 from pyro.infer import SVI, Trace_ELBO
 from pyro.optim import Adam
-import sys
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
+from VAE import FormatVAE
+from utilities.name_dataset import NameDataset
+from utilities.plot import plot_losses
 
-from FormatSSVAE.vae import FormatVAE
-from FormatSSVAE.util.name_ds import NameDataset
-from FormatSSVAE.util.plot import plot_losses
-
+parser = argparse.ArgumentParser()
+parser.add_argument('--batch_size', help='batch_size', type=int, default=2048)
+parser.add_argument('--num_epochs', help='number of epochs',
+                    type=int, default=1000)
+parser.add_argument('--learning_rate', help='learning rate',
+                    type=float, default=1.e-20)
+parser.add_argument('--max_input_size',
+                    help='max string length', type=int, default=18)
+args = parser.parse_args()
 
 pyro.enable_validation(True)
-NUM_EPOCHS = 1000
-ADAM_CONFIG = {'lr': 0.0005}
-BATCH_SIZE = 2048
-MAX_INPUT_STRING_LEN = 18
+NUM_EPOCHS = args.num_epochs
+LR = args.learning_rate
+BATCH_SIZE = args.batch_size
+MAX_INPUT_STRING_LEN = args.max_input_size
+ADAM_CONFIG = {'lr': LR}
 
 
 def weights_for_balanced_class(df, target_column):
@@ -63,19 +73,6 @@ def simple_elbo_kl_annealing(model, guide, *args, **kwargs):
     return -elbo
 
 
-dataset = NameDataset("data/FirstNames.csv", "name",
-                      max_string_len=MAX_INPUT_STRING_LEN)
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-vae = FormatVAE(encoder_hidden_size=256,
-                decoder_hidden_size=64, mlp_hidden_size=32)
-if len(sys.argv) > 1:
-    vae.load_checkpoint(filename=sys.argv[1].split('/')[-1])
-
-svi_loss = SVI(vae.model, vae.guide, Adam(ADAM_CONFIG), loss=Trace_ELBO())
-# svi_loss = SVI(vae.model, vae.guide, Adam(ADAM_CONFIG), loss=simple_elbo_kl_annealing)
-
-
 def train_one_epoch(loss, dataloader, epoch_num):
     total_loss = 0.
     i = 1
@@ -91,6 +88,20 @@ def train_one_epoch(loss, dataloader, epoch_num):
 
     avg_loss = total_loss/len(dataloader)
     return avg_loss
+
+
+dataset = NameDataset("data/FirstNames.csv", "name",
+                      max_string_len=MAX_INPUT_STRING_LEN)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+vae = FormatVAE(encoder_hidden_size=512,
+                decoder_hidden_size=512, mlp_hidden_size=128)
+
+if len(sys.argv) > 1:
+    vae.load_checkpoint(filename=sys.argv[1].split('/')[-1])
+
+svi_loss = SVI(vae.model, vae.guide, Adam(ADAM_CONFIG), loss=Trace_ELBO())
+# svi_loss = SVI(vae.model, vae.guide, Adam(ADAM_CONFIG), loss=simple_elbo_kl_annealing)
 
 
 epoch_losses = []

@@ -1,11 +1,12 @@
-import torch 
-from torch.utils.data import Dataset, DataLoader
-from FormatSSVAE.util.ds_utils import remove_rows_in_col, convert_row_to_lower
-from FormatSSVAE.const import ALL_LETTERS
+import torch
 import pandas as pd
+from torch.utils.data import Dataset, DataLoader
+from utilities.dataset_utilities import remove_rows_in_col, convert_row_to_lower
+from constant import ALL_LETTERS
+
 
 class NameDataset(Dataset):
-    def __init__(self, csv_path, col_name, max_string_len = 18, format_col_name = None):
+    def __init__(self, csv_path, col_name, max_string_len=18, format_col_name=None):
         """
         Args:
             csv_file (string): Path to the csv file WITHOUT labels
@@ -18,7 +19,7 @@ class NameDataset(Dataset):
 
     def __len__(self):
         return len(self.data_frame)
-    
+
     def __getitem__(self, index):
         return self.data_frame.iloc[index]
 
@@ -30,7 +31,8 @@ class NameDataset(Dataset):
         """
         df = pd.read_csv(csv_path)
         df = self._clean_dataframe(df, col_name)
-        self.data_frame = self.data_frame.append(df[col_name]).drop_duplicates()
+        self.data_frame = self.data_frame.append(
+            df[col_name]).drop_duplicates()
 
     def _clean_dataframe(self, df, col_name):
         convert_row_to_lower(df, col_name)
